@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: san-bong-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: quan_ly_san_bong
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro,Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quan_ly_san_bong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
