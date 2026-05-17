@@ -9,5 +9,6 @@ if errorlevel 1 (
     exit /b 1
 )
 echo Starting backend dev server...
+npm install
 npm run dev
 pause
