@@ -1,38 +1,39 @@
-#!/usr/bin/env sh
-set -eu
+#!/bin/bash
 
-COMPOSE_CMD="${COMPOSE_CMD:-podman-compose}"
-DB_SERVICE="${DB_SERVICE:-postgres}"
-DB_USER="${DB_USER:-postgres}"
-DB_NAME="${DB_NAME:-quan_ly_san_bong}"
-SQL_FILE_IN_CONTAINER="${SQL_FILE_IN_CONTAINER:-/docker-entrypoint-initdb.d/01-database.sql}"
+# ============================================================
+#  HỆ THỐNG QUẢN LÝ SÂN BÓNG - PTIT
+#  Script: migrate-db.sh
+#  Mô tả: Chạy file database.sql để khởi tạo/cập nhật CSDL
+# ============================================================
 
-cd "$(dirname "$0")"
+# Tên container được định nghĩa trong compose.yaml
+CONTAINER_NAME="san-bong-postgres"
+SQL_FILE="database.sql"
 
-if ! command -v "$COMPOSE_CMD" >/dev/null 2>&1; then
-    echo "Error: $COMPOSE_CMD is not installed or not in PATH." >&2
+echo "--- Bắt đầu quá trình Migration ---"
+
+# 1. Kiểm tra xem Docker container có đang chạy không
+if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "LỖI: Container '${CONTAINER_NAME}' không hoạt động."
+    echo "Vui lòng chạy 'docker compose up -d' để khởi động hệ thống."
     exit 1
 fi
 
-echo "Starting PostgreSQL service..."
-"$COMPOSE_CMD" up -d "$DB_SERVICE"
+# 2. Kiểm tra file SQL cục bộ
+if [ ! -f "$SQL_FILE" ]; then
+    echo "LỖI: Không tìm thấy file $SQL_FILE."
+    exit 1
+fi
 
-echo "Waiting for PostgreSQL to be ready..."
-i=0
-until "$COMPOSE_CMD" exec -T "$DB_SERVICE" pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; do
-    i=$((i + 1))
-    if [ "$i" -ge 30 ]; then
-        echo "Error: PostgreSQL did not become ready in time." >&2
-        "$COMPOSE_CMD" logs --tail=80 "$DB_SERVICE" >&2 || true
-        exit 1
-    fi
-    sleep 2
-done
+echo "Đang áp dụng cấu trúc CSDL từ $SQL_FILE vào container $CONTAINER_NAME..."
 
-echo "Running database migration from $SQL_FILE_IN_CONTAINER..."
-"$COMPOSE_CMD" exec -T "$DB_SERVICE" psql \
-    -v ON_ERROR_STOP=1 \
-    -U "$DB_USER" \
-    -f "$SQL_FILE_IN_CONTAINER"
+# 3. Thực thi file SQL
+# database.sql đã bao gồm logic tạo DB và kết nối (\connect)
+docker exec -i "$CONTAINER_NAME" psql -U postgres -d postgres < "$SQL_FILE"
 
-echo "Migration completed."
+if [ $? -eq 0 ]; then
+    echo "--- Migration hoàn tất thành công! ---"
+else
+    echo "--- Migration thất bại! Vui lòng kiểm tra lỗi bên trên. ---"
+    exit 1
+fi
